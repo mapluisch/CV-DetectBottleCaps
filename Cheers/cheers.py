@@ -69,7 +69,6 @@ def get_still_frame_from_video(video_filepath):
         ret, frame = vid.read()
 
         diff = cv2.absdiff(last_frame, frame)
-        # mask = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
         if(diff.sum() < min_absdiff):
             detected_still_frame = frame
             min_absdiff = diff.sum()
@@ -77,6 +76,9 @@ def get_still_frame_from_video(video_filepath):
         last_frame = frame
     filename = STILLFRAME_FOLDER + f'{video_filepath}_dsf.jpg'  
     cv2.imwrite(filename, detected_still_frame)
+    if (DEBUG):
+        print("-- saved still frame after %s seconds --" %
+              (time.time() - start_time))
 
     return filename
 
