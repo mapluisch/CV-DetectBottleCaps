@@ -7,6 +7,7 @@ import shutil
 import time
 from pathlib import Path
 
+import numpy as np
 import cv2
 import torch
 import torch.backends.cudnn as cudnn
@@ -58,7 +59,9 @@ def detect(opt, save_img=False):
 
     # Get names and colors
     names = model.module.names if hasattr(model, 'module') else model.names
-    colors = [[random.randint(0, 255) for _ in range(3)] for _ in range(len(names))]
+    
+    # specified my own colors that I already used in the plan of attack (for some reason openCV uses BGR instead of RGB order...)
+    colors = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 
     # Run inference
     t0 = time.time()
@@ -94,6 +97,11 @@ def detect(opt, save_img=False):
             txt_path = str(Path(out) / Path(p).stem) + ('_%g' % dataset.frame if dataset.mode == 'video' else '')
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
+
+            bottlecaps_facedown = 0
+            bottlecaps_faceup = 0
+            bottlecaps_deformed = 0
+
             if det is not None and len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -102,6 +110,13 @@ def detect(opt, save_img=False):
                 for c in det[:, -1].unique():
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += '%g %ss, ' % (n, names[int(c)])  # add to string
+                    # count bottle caps on my own depending on the detected class
+                    if (c == 0):
+                        bottlecaps_facedown += int(n)
+                    elif (c == 1):
+                        bottlecaps_faceup += int(n)
+                    elif (c == 2):
+                        bottlecaps_deformed += int(n)
 
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
@@ -115,6 +130,24 @@ def detect(opt, save_img=False):
                         label = '%s %.2f' % (names[int(cls)], conf)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
 
+                
+                
+                # draw info text about the different amount of bottle caps present
+                
+                # draw transparent rectangle for better text-readability (source, a bit adapted by me: https://stackoverflow.com/questions/56472024/how-to-change-the-opacity-of-boxes-cv2-rectangle)
+                x, y, w, h = 0, 0, 426, 150
+                sub_img = im0[y:y+h, x:x+w]
+                black_rect = np.ones(sub_img.shape, dtype=np.uint8) * 0
+                res = cv2.addWeighted(sub_img, 0.5, black_rect, 0.5, 1.0)
+                # Putting the image back to its position
+                im0[y:y+h, x:x+w] = res
+                # draw actual text
+                cv2.putText(im0, str(bottlecaps_facedown) + " bottle caps face-down", (0,25), cv2.FONT_HERSHEY_DUPLEX, 1, colors[0], 2)
+                cv2.putText(im0, str(bottlecaps_faceup) + " bottle caps face-up", (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, colors[1], 2)
+                cv2.putText(im0, str(bottlecaps_deformed) + " bottle caps deformed", (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, colors[2], 2)
+                # draw separator line
+                cv2.line(im0, (0, 108), (424, 108), (175,175,175), 2)
+                cv2.putText(im0, str(bottlecaps_facedown + bottlecaps_faceup + bottlecaps_deformed) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
             # Print time (inference + NMS)
             print('%sDone. (%.3fs)' % (s, t2 - t1))
 
