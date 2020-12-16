@@ -7,7 +7,7 @@ import time
 import argparse
 from yolov5 import detect
 
-DEBUG = True
+DEBUG = False
 FRAME_POSITION = cv2.CAP_PROP_POS_FRAMES
 FRAME_COUNT = cv2.CAP_PROP_FRAME_COUNT
 START_FRAME_FACTOR = 1/3
@@ -25,9 +25,9 @@ def detect_the_bottle_caps():
             still_frame = get_still_frame_from_video(opt.input)
             opt.source = still_frame
             save_img = True
-            if (DEBUG):
-                print("-- starting yolov5 detection after %s seconds --" % (time.time() - start_time))
+            if DEBUG: print("-- yolov5 detection started after %s seconds --" % (time.time() - start_time))
             detect.detect(opt, save_img)
+            if DEBUG: print("-- yolov5 detection ended after %s seconds --" % (time.time() - start_time))
     else:
         print("Please specify a correct file path to your video file.")
 
@@ -35,9 +35,7 @@ def detect_the_bottle_caps():
 def get_still_frame_from_video(video_filepath):
     # load OpenCV VideoCapture on specified video
     vid = cv2.VideoCapture(video_filepath)
-    if (DEBUG):
-        print("-- opened video after %s seconds --" %
-              (time.time() - start_time))
+    if DEBUG: print("-- opened video after %s seconds --" % (time.time() - start_time))
     # get total num of frames
     total_frames = int(cv2.VideoCapture.get(vid, FRAME_COUNT))
     # calculate start and end-frame for further inspection based on the total amount of frames
@@ -46,16 +44,11 @@ def get_still_frame_from_video(video_filepath):
     end_frame = int(total_frames*END_FRAME_FACTOR)
     fps = int(vid.get(cv2.CAP_PROP_FPS))
 
-    if (DEBUG):
-        print("-- calculated frame range after %s seconds --" %
-              (time.time() - start_time))
+    if DEBUG: print("-- calculated frame range after %s seconds --" % (time.time() - start_time))
     # "manually" read and store first frame, so that frame i+1 can check against last_frame (= frame i)
     vid.set(FRAME_POSITION, start_frame)
     ret, last_frame = vid.read()
-    if (DEBUG):
-        print("-- grabbed first frame after %s seconds --" %
-              (time.time() - start_time))
-    
+    if DEBUG: print("-- grabbed first frame after %s seconds --" % (time.time() - start_time))    
     
     detected_still_frame = last_frame
     min_absdiff = float('inf')
@@ -76,9 +69,7 @@ def get_still_frame_from_video(video_filepath):
         last_frame = frame
     filename = STILLFRAME_FOLDER + f'{video_filepath}_dsf.jpg'  
     cv2.imwrite(filename, detected_still_frame)
-    if (DEBUG):
-        print("-- saved still frame after %s seconds --" %
-              (time.time() - start_time))
+    if DEBUG: print("-- saved still frame after %s seconds --" % (time.time() - start_time))
 
     return filename
 
@@ -87,12 +78,13 @@ def get_still_frame_from_video(video_filepath):
 if __name__ == "__main__":
     start_time = time.time()
     parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true', help='print some debug info during runtime')
     parser.add_argument('--input' , type=str, default='./inputvideo.mp4', help='input video file to scan for bottle caps')
-    parser.add_argument('--weights', nargs='+', type=str, default='./weights/v5s_2000epochs.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='./weights/v5s_5000epochs.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
-    parser.add_argument('--conf-thres', type=float, default=0.75, help='object confidence threshold')
-    parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
+    parser.add_argument('--conf-thres', type=float, default=0.8, help='object confidence threshold')
+    parser.add_argument('--iou-thres', type=float, default=0.65, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
@@ -102,8 +94,11 @@ if __name__ == "__main__":
     parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
     parser.add_argument('--augment', action='store_true', help='augmented inference')
     parser.add_argument('--update', action='store_true', help='update all models')
-    parser.add_argument('--raw-video-input', type=str, default='False', help='use the video input and directly run it through yolov5')
+    parser.add_argument('--raw-video-input', action='store_true', help='use the video input and directly run it through yolov5')
     opt = parser.parse_args()
+    
+    DEBUG = opt.debug
+    
     if(opt.input):
         detect_the_bottle_caps()
     print("-- total runtime: %s seconds --" % (time.time() - start_time))

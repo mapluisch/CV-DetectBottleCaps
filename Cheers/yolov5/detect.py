@@ -138,7 +138,7 @@ def detect(opt, save_img=False):
                 x, y, w, h = 0, 0, 426, 150
                 sub_img = im0[y:y+h, x:x+w]
                 black_rect = np.ones(sub_img.shape, dtype=np.uint8) * 0
-                res = cv2.addWeighted(sub_img, 0.5, black_rect, 0.5, 1.0)
+                res = cv2.addWeighted(sub_img, 0.25, black_rect, 0.5, 1.0)
                 # Putting the image back to its position
                 im0[y:y+h, x:x+w] = res
                 # draw actual text
@@ -149,7 +149,7 @@ def detect(opt, save_img=False):
                 cv2.line(im0, (0, 108), (424, 108), (175,175,175), 2)
                 cv2.putText(im0, str(bottlecaps_facedown + bottlecaps_faceup + bottlecaps_deformed) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
             # Print time (inference + NMS)
-            print('%sDone. (%.3fs)' % (s, t2 - t1))
+            if opt.debug: print('%sDone. (%.3fs)' % (s, t2 - t1))
 
             # Stream results
             if view_img:
@@ -175,9 +175,9 @@ def detect(opt, save_img=False):
                     vid_writer.write(im0)
 
     if save_txt or save_img:
-        print('Results saved to %s' % Path(out))
+        if opt.debug: print('Results saved to %s' % Path(out))
 
-    print('Done. (%.3fs)' % (time.time() - t0))
+    if opt.debug: print('Done. (%.3fs)' % (time.time() - t0))
 
 
 if __name__ == '__main__':
