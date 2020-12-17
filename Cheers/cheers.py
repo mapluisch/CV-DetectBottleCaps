@@ -37,12 +37,12 @@ def get_still_frame_from_video(video_filepath):
     vid = cv2.VideoCapture(video_filepath)
     if DEBUG: print("-- opened video after %s seconds --" % (time.time() - start_time))
     # get total num of frames
-    total_frames = int(cv2.VideoCapture.get(vid, FRAME_COUNT))
+    total_frames    = int(cv2.VideoCapture.get(vid, FRAME_COUNT))
     # calculate start and end-frame for further inspection based on the total amount of frames
     # in this case: inspection starts at 1/4th of the videos length and ends at 3/4ths, skipping 50% of "unnecessary" video footage
-    start_frame = int(total_frames*START_FRAME_FACTOR)
-    end_frame = int(total_frames*END_FRAME_FACTOR)
-    fps = int(vid.get(cv2.CAP_PROP_FPS))
+    start_frame     = int(total_frames*START_FRAME_FACTOR)
+    end_frame       = int(total_frames*END_FRAME_FACTOR)
+    fps             = int(vid.get(cv2.CAP_PROP_FPS))
 
     if DEBUG: print("-- calculated frame range after %s seconds --" % (time.time() - start_time))
     # "manually" read and store first frame, so that frame i+1 can check against last_frame (= frame i)
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', help='print some debug info during runtime')
     parser.add_argument('--input' , type=str, default='./inputvideo.mp4', help='input video file to scan for bottle caps')
-    parser.add_argument('--weights', nargs='+', type=str, default='./weights/v5s_5000epochs.pt', help='model.pt path(s)')
+    parser.add_argument('--weights', nargs='+', type=str, default='./weights/v5s_7000epochs.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.8, help='object confidence threshold')
