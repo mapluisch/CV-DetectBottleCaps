@@ -16,12 +16,19 @@ STILLFRAME_FOLDER = './detected_still_frames/'
 
 
 def detect_the_bottle_caps():
-    if os.path.exists(opt.input):
-        if(opt.raw_video_input == "True"):
+    if os.path.exists(opt.input) or os.path.exists(opt.input_img):
+        if(opt.raw_video_input):
             opt.source = opt.input
             save_img = True
             detect.detect(opt, save_img)
-        else:
+        elif(os.path.exists(opt.input_img)):
+            still_frame = get_still_frame_from_video(opt.input)
+            opt.source = cv2.imread(opt.input_img)
+            save_img = True
+            if DEBUG: print("-- yolov5 detection started after %s seconds --" % (time.time() - start_time))
+            detect.detect(opt, save_img)
+            if DEBUG: print("-- yolov5 detection ended after %s seconds --" % (time.time() - start_time))
+        elif(os.path.exists(opt.input)):
             still_frame = get_still_frame_from_video(opt.input)
             opt.source = still_frame
             save_img = True
@@ -79,7 +86,8 @@ if __name__ == "__main__":
     start_time = time.time()
     parser = argparse.ArgumentParser()
     parser.add_argument('--debug', action='store_true', help='print some debug info during runtime')
-    parser.add_argument('--input' , type=str, default='./inputvideo.mp4', help='input video file to scan for bottle caps')
+    parser.add_argument('--input-img' , type=str, default='', help='input image file to directly pass to yolo and scan for bottle caps')
+    parser.add_argument('--input' , type=str, default='', help='input video file to scan for bottle caps')
     parser.add_argument('--weights', nargs='+', type=str, default='./weights/v5s_7000epochs.pt', help='model.pt path(s)')
     parser.add_argument('--source', type=str, default='inference/images', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=960, help='inference size (pixels)')
