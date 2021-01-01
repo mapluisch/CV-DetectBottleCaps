@@ -15,10 +15,10 @@ STILLFRAME_FOLDER = './Output/Still Frames/'
 ANNOTATED_OUTPUT_FOLDER = './Output/Annotated Frames/'
 
 CONFIG_DIR = './YOLOv4/Config/'
-CONFIG_NAME = 'v4tiny_6000.cfg'
+CONFIG_NAME = 'v4tiny_15000.cfg'
 
 WEIGHTS_DIR = './YOLOv4/Weights/'
-WEIGHTS_NAME = 'v4tiny_6000.weights'
+WEIGHTS_NAME = 'v4tiny_15000.weights'
 
 NON_MAX_SUPRESSION_THRESHOLD = 0.5
 CONF_THRESHOLD = 0.5
