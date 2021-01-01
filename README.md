@@ -27,13 +27,13 @@ and you'll get an annotated still frame in ./Output/Annotated Frames/ after appr
  ## Arguments
 
 ```
---verbose 					print extensive information per step during runtime
---video							path to video file (to first detect a still frame from and then run inference on)
---image							path to image file (to directly run inference on)
---conf-thres				confidence threshold [0.0-1.0] whether or not a detected object is a bottle cap
---nms-thres					non-max-suppression threshold [0.0-1.0] used to select the best bounding box per detected object
---show-result				immediately show the annotated output frame using cv2.imshow
---show-conf					display the confidence values in the annotated result
---save-stillframe		save the detected still frame (default = false)
---live							show live-annotation of the passed in video-file, frame-by-frame
+--verbose		print extensive information per step during runtime
+--video			path to video file (to first detect a still frame from and then run inference on)
+--image			path to image file (to directly run inference on)
+--conf-thres		confidence threshold [0.0-1.0] whether or not a detected object is a bottle cap
+--nms-thres		non-max-suppression threshold [0.0-1.0] used to select the best bounding box per detected object
+--show-result		immediately show the annotated output frame using cv2.imshow
+--show-conf		display the confidence values in the annotated result
+--save-stillframe	save the detected still frame (default = false)
+--live			show live-annotation of the passed in video-file, frame-by-frame
 ```
