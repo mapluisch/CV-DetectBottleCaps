@@ -2,6 +2,7 @@ import sys
 import os
 import cv2
 import time
+import math
 import argparse
 import numpy as np
 
@@ -16,10 +17,10 @@ STILLFRAME_FOLDER = './Output/Still Frames/'
 ANNOTATED_OUTPUT_FOLDER = './Output/Annotated Frames/'
 
 CONFIG_DIR = './YOLOv4/Config/'
-CONFIG_NAME = 'v4tiny_15000.cfg'
+CONFIG_NAME = 'v4tiny_9000.cfg'
 
 WEIGHTS_DIR = './YOLOv4/Weights/'
-WEIGHTS_NAME = 'v4tiny_15000.weights'
+WEIGHTS_NAME = 'v4tiny_9000.weights'
 
 NON_MAX_SUPRESSION_THRESHOLD = 0.5
 CONF_THRESHOLD = 0.5
@@ -34,9 +35,11 @@ def print_verbose(message, forcePrint=False):
 
 def clean_filename(filename):
     try:
-        # filter path information out of passed in filename, e.g. if the specified file is in a different folder
-        components = filename.split('/')
-        return components[len(components)-1]
+        # filter file-path out of passed in filename, e.g. if the specified file is in a different folder
+        path_split = filename.split('/')
+        # filter file-ending (.mp4, .jpg, ...) out of filename
+        extension_split = path_split[len(path_split)-1].split('.')
+        return extension_split[0]
     except ValueError:
         print_verbose("could not clean filename")
         return filename
@@ -124,12 +127,30 @@ def get_still_frame_from_video(video_filepath):
 
     return detected_still_frame
 
+# source: https://stackoverflow.com/questions/61695773/how-to-set-the-best-value-for-gamma-correction
+def gamma_correct(image):
+    # bgr-image to HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    # compute gamma as log(mid*255) / log(mean)
+    mid = 0.5
+    mean = np.mean(val)
+    gamma = math.log(mid*255)/math.log(mean)
+    # gamma correction on value channel
+    val_gamma = np.power(val, gamma).clip(0,255).astype(np.uint8)
+    # combine corrected value channel with original hue and saturation channels
+    hsv_gamma = cv2.merge([hue, sat, val_gamma])
+    return cv2.cvtColor(hsv_gamma, cv2.COLOR_HSV2BGR)
+
 def image_inference(image):
+    # gamma correct input image
+    image = gamma_correct(image)    
+
     # init neural net-model using my yolov4 config and self-trained weights
     net = cv2.dnn_DetectionModel((CONFIG_DIR + CONFIG_NAME), (WEIGHTS_DIR + WEIGHTS_NAME))
     net.setInputScale(1/500)
     net.setInputSize((960,540))    
-    
+
     # set preferred backend and target to run the inference on
     net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT);
     net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU);
@@ -199,7 +220,6 @@ def video_inference(video):
         # press ESC to quit prematurely
         if cv2.waitKey(1) == 27:
             break
-
 
 if __name__ == "__main__":
     start_time = time.time()
