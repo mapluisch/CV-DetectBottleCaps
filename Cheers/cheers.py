@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+""" 
+"Cheers" detects and annotates bottle caps in a given video or image file and returns an annotated output frame.
+Given a video-file, it'll either detect a still frame and run inference and annotation on it or do it live, frame-by-frame (--live argument).
+Given an image-file, it'll directly run inference and annotation on it.
+"""
+
 import sys
 import os
 import cv2
@@ -6,34 +13,42 @@ import math
 import argparse
 import numpy as np
 
-VERBOSE = False
+# ------------------- Variables -------------------
+
+# -- Video Frame variables
 FRAME_POSITION = cv2.CAP_PROP_POS_FRAMES
 FRAME_COUNT = cv2.CAP_PROP_FRAME_COUNT
 START_FRAME_FACTOR = 1/3
 END_FRAME_FACTOR = 2/3
 LIVE_FRAMESKIP = 0
 
-STILLFRAME_OUTPUT_FOLDER = './Output/Still Frames/'
-ANNOTATED_OUTPUT_FOLDER = './Output/Annotated Frames/'
+# -- Output directories
+STILLFRAME_OUTPUT_DIR = './Output/Still Frames/'
+ANNOTATED_OUTPUT_DIR = './Output/Annotated Frames/'
 
+# -- Trained YOLO config directory and filename
 CONFIG_DIR = './YOLOv4/Config/'
 CONFIG_NAME = 'v4tiny_9000.cfg'
-
+# -- Trained YOLO weights directory and filename
 WEIGHTS_DIR = './YOLOv4/Weights/'
 WEIGHTS_NAME = 'v4tiny_9000.weights'
 
+# -- Inference / Annotation variables
 NON_MAX_SUPPRESSION_THRESHOLD = 0.5
 CONF_THRESHOLD = 0.5
 ANNOTATION_LINE_THICKNESS = 4
 
-
+# -- Helper variables for detected object classes
 CLASS_COLORS = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 CLASS_NAMES = ["face-down", "face-up", "deformed"]
 
+# -------------------------------------------------
+
 # ------------------- Utilities -------------------
+
 def print_verbose(message, forcePrint=False):
     """Prints message to console incl. elapsed runtime in a uniform style."""
-    if VERBOSE or forcePrint: print("-- \033[94m[%.3f s]\033[0m %s --" % ((time.time() - start_time), message))
+    if opt.verbose or forcePrint: print("-- \033[94m[%.3f s]\033[0m %s --" % ((time.time() - start_time), message))
 
 def clean_filename(filename):
     """Removes path- and extension from passed-in filename."""
@@ -62,10 +77,27 @@ def gamma_correct(image):
     # combine corrected value channel with original hue and saturation channels
     hsv_gamma = cv2.merge([hue, sat, val_gamma])
     return cv2.cvtColor(hsv_gamma, cv2.COLOR_HSV2BGR)
+
+def init_net_model():
+    """Initializes and returns the OpenCV dnn detectionmodel based on the specified config and trained weights."""
+    net = cv2.dnn_DetectionModel((CONFIG_DIR + CONFIG_NAME), (WEIGHTS_DIR + WEIGHTS_NAME))
+    net.setInputScale(1/500)
+    # set image input size to 960 x 540 (same dimensions that I've trained my weights with)
+    net.setInputSize((960,540))    
+    # set default backend and target; use DNN_BACKEND_INFERENCE_ENGINE for real-time video annotation (OpenVINO)
+    # does not work in this project sadly (bound to VM)
+    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT);
+    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU);
+    print_verbose("initialized detection model")
+    return net
+
 # -------------------------------------------------
+
+# ------------------- Cheers! ---------------------
 
 def detect_the_bottle_caps():
     """Reads the input and delegates it to the correct sub-functions for still-frame detection and inference. Saves (and shows) the annotated result."""
+    # check for filepath validity first
     if os.path.exists(opt.video) or os.path.exists(opt.image):
         # ----- Live Video Inference -----
         if(opt.live):
@@ -88,7 +120,7 @@ def detect_the_bottle_caps():
             # save the annotated result in the annotated output folder
             filename = opt.video if (should_detect_stillframe) else opt.image
             filename = clean_filename(filename)
-            output_filepath = ANNOTATED_OUTPUT_FOLDER + filename + "_annotated.jpg"
+            output_filepath = ANNOTATED_OUTPUT_DIR + filename + "_annotated.jpg"
             cv2.imwrite(output_filepath, annotated_image)
             print_verbose("successfully saved an annotated frame [%s]" % output_filepath, forcePrint=True)
 
@@ -143,28 +175,22 @@ def get_still_frame_from_video(video_filepath):
     
     # save the detected still frame if --save-stillframe is being used
     if(opt.save_stillframe):
-        filename = STILLFRAME_OUTPUT_FOLDER + f'{clean_filename(video_filepath)}_stillframe.jpg'  
+        filename = STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg'  
         cv2.imwrite(filename, detected_still_frame)
         print_verbose("saved still frame")
 
     return detected_still_frame
 
-def image_inference(image):
+def image_inference(image, net=None, gammaCorrect=True):
     """Runs inference on an input-image to detect all bottle caps per class. Returns an annotated result image with bounding boxes around detected bottle caps."""
     # gamma correct input image
-    image = gamma_correct(image)    
+    if gammaCorrect: image = gamma_correct(image)    
 
-    # init neural net-model using my yolov4 config and self-trained weights
-    net = cv2.dnn_DetectionModel((CONFIG_DIR + CONFIG_NAME), (WEIGHTS_DIR + WEIGHTS_NAME))
-    net.setInputScale(1/500)
-    net.setInputSize((960,540))    
-
-    # set preferred backend and target to run the inference on
-    net.setPreferableBackend(cv2.dnn.DNN_BACKEND_DEFAULT);
-    net.setPreferableTarget(cv2.dnn.DNN_TARGET_CPU);
-    print_verbose("initialized detection model")
-    print_verbose("starting bottle cap detection")
+    # init neural net-model using my yolov4 config and self-trained weights; skip this step if video-inference passes in a net
+    if net is None:
+        net = init_net_model()    
     
+    print_verbose("starting bottle cap detection")
     # run opencv's detect function on the passed-in image, using the specified confidence and non-max-suppression threshs
     classIds, confidences, boxes = net.detect(image, opt.conf, opt.nms)
     
@@ -205,7 +231,7 @@ def image_inference(image):
     cv2.putText(image, str(bottlecaps_faceup) + " bottle caps %s" % CLASS_NAMES[1], (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[1], 2)
     cv2.putText(image, str(bottlecaps_deformed) + " bottle caps %s" % CLASS_NAMES[2], (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[2], 2)
     cv2.putText(image, str(bottlecaps_facedown + bottlecaps_faceup + bottlecaps_deformed) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-    cv2.line(image, (0, 108), (424, 108), (175,175,175), 2)
+    cv2.line(image, (0, 108), (424, 108), (175, 175, 175), 2)
 
     return image
 
@@ -215,16 +241,21 @@ def video_inference(video):
     vid = cv2.VideoCapture(video)
     total_frames = int(cv2.VideoCapture.get(vid, FRAME_COUNT))
 
+    # init detection model
+    net = init_net_model()
+
     # use every 1+LIVE_FRAMESKIP frame to read and run inference on
     for i in range(0, total_frames, 1+LIVE_FRAMESKIP):
+        print_verbose("skipped to frame %i" % i)
         # skip to frame i
         vid.set(FRAME_POSITION, i)
         # read still image from video frame, check ret (bool) if frame is correctly read or not
         ret, frame = vid.read()
-        # if frame is correctly read, run inference and immediately show the result
+        print_verbose("read frame %i" % i)
+        # if frame is correctly read, run inference and immediately show the result; skip gamma correction for faster output
         if (ret):
-            annotated_frame = image_inference(frame)
-            cv2.imshow('Cheers - Video Inference', annotated_frame)          
+            annotated_frame = image_inference(frame, net, False)
+            cv2.imshow('Cheers - Video Inference', annotated_frame)
         # press ESC to quit prematurely
         if cv2.waitKey(1) == 27:
             break
@@ -245,11 +276,12 @@ if __name__ == "__main__":
     parser.add_argument('--save-stillframe', action='store_true',                               help='save detected still-frames in the corresponding subfolder')
     parser.add_argument('--live', action='store_true',                                          help='live-annotation of the specified input video, frame-by-frame')
     opt = parser.parse_args()
-    # set VERBOSE var to passed-in verbose-flag
-    VERBOSE = opt.verbose
+
     # call detect_the_bottle_caps, if either --video or --image was specified
     if(opt.video or opt.image):
         detect_the_bottle_caps()
     else: 
         print("\033[93m-- Please specify some --video or --image file for detection. Take a look at all possible input arguments. --\033[0m\n")
         parser.print_help()
+
+# -------------------------------------------------
