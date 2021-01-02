@@ -41,6 +41,7 @@ ANNOTATION_LINE_THICKNESS = 4
 # -- Helper variables for detected object classes
 CLASS_COLORS = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 CLASS_NAMES = ["face-down", "face-up", "deformed"]
+CLASS_NAMES_COLORED = ["\u001b[34;1mface-down\u001b[0m", "\u001b[33;1mface-up\u001b[0m", "\u001b[32;1mdeformed\u001b[0m"]
 
 # -------------------------------------------------
 
@@ -199,7 +200,7 @@ def image_inference(image, net=None, gammaCorrect=True):
     bottlecaps_facedown = classList.count(0)
     bottlecaps_faceup = classList.count(1)
     bottlecaps_deformed = classList.count(2)
-    print_verbose("detected %s bottle caps in total [\u001b[34;1m%i %s\u001b[0m, \u001b[33;1m%i %s\u001b[0m, \u001b[32;1m%i %s\u001b[0m]" % (len(boxes), bottlecaps_facedown, CLASS_NAMES[0], bottlecaps_faceup, CLASS_NAMES[1], bottlecaps_deformed, CLASS_NAMES[2]))
+    print_verbose("detected %s bottle caps in total [%i %s, %i %s, %i %s" % (len(boxes), bottlecaps_facedown, CLASS_NAMES_COLORED[0], bottlecaps_faceup, CLASS_NAMES_COLORED[1], bottlecaps_deformed, CLASS_NAMES_COLORED[2]))
     
     # draw bounding boxes around detected bottle caps
     print_verbose("annotation started")
@@ -215,7 +216,7 @@ def image_inference(image, net=None, gammaCorrect=True):
         cv2.putText(image, CLASS_NAMES[classIds[box][0]], (x,y+header_height-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255))
         # draw confidence, if --show-conf is being used
         if (opt.show_conf): cv2.putText(image, "%.2f" % confidences[box], (x,y+h-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
-        print_verbose("annotation: bottle cap %s at position (%s,%s) with confidence %.2f" % (CLASS_NAMES[classIds[box][0]], x, y, confidences[box]))
+        print_verbose("annotation: bottle cap %s at position (%s,%s) with confidence %.2f" % (CLASS_NAMES_COLORED[classIds[box][0]], x, y, confidences[box]))
     print_verbose("annotation ended")
 
     # -- draw top-left verbose info-output --    
