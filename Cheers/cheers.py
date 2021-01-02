@@ -13,7 +13,7 @@ START_FRAME_FACTOR = 1/3
 END_FRAME_FACTOR = 2/3
 LIVE_FRAMESKIP = 0
 
-STILLFRAME_FOLDER = './Output/Still Frames/'
+STILLFRAME_OUTPUT_FOLDER = './Output/Still Frames/'
 ANNOTATED_OUTPUT_FOLDER = './Output/Annotated Frames/'
 
 CONFIG_DIR = './YOLOv4/Config/'
@@ -22,7 +22,7 @@ CONFIG_NAME = 'v4tiny_9000.cfg'
 WEIGHTS_DIR = './YOLOv4/Weights/'
 WEIGHTS_NAME = 'v4tiny_9000.weights'
 
-NON_MAX_SUPRESSION_THRESHOLD = 0.5
+NON_MAX_SUPPRESSION_THRESHOLD = 0.5
 CONF_THRESHOLD = 0.5
 ANNOTATION_LINE_THICKNESS = 4
 
@@ -30,10 +30,13 @@ ANNOTATION_LINE_THICKNESS = 4
 CLASS_COLORS = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 CLASS_NAMES = ["face-down", "face-up", "deformed"]
 
+# ------------------- Utilities -------------------
 def print_verbose(message, forcePrint=False):
-    if VERBOSE or forcePrint: print("-- [%.3f s] %s --" % ((time.time() - start_time), message))
+    """Prints message to console incl. elapsed runtime in a uniform style."""
+    if VERBOSE or forcePrint: print("-- \033[94m[%.3f s]\033[0m %s --" % ((time.time() - start_time), message))
 
 def clean_filename(filename):
+    """Removes path- and extension from passed-in filename."""
     try:
         # filter file-path out of passed in filename, e.g. if the specified file is in a different folder
         path_split = filename.split('/')
@@ -44,7 +47,25 @@ def clean_filename(filename):
         print_verbose("could not clean filename")
         return filename
 
+# source: https://stackoverflow.com/questions/61695773/how-to-set-the-best-value-for-gamma-correction
+def gamma_correct(image):
+    """Gamma-Corrects an input image and returns the corrected version using the HSV model."""
+    # bgr-image to HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    hue, sat, val = cv2.split(hsv)
+    # compute gamma as log(mid*255) / log(mean)
+    mid = 0.5
+    mean = np.mean(val)
+    gamma = math.log(mid*255)/math.log(mean)
+    # gamma correction on value channel
+    val_gamma = np.power(val, gamma).clip(0,255).astype(np.uint8)
+    # combine corrected value channel with original hue and saturation channels
+    hsv_gamma = cv2.merge([hue, sat, val_gamma])
+    return cv2.cvtColor(hsv_gamma, cv2.COLOR_HSV2BGR)
+# -------------------------------------------------
+
 def detect_the_bottle_caps():
+    """Reads the input and delegates it to the correct sub-functions for still-frame detection and inference. Saves (and shows) the annotated result."""
     if os.path.exists(opt.video) or os.path.exists(opt.image):
         # ----- Live Video Inference -----
         if(opt.live):
@@ -80,6 +101,7 @@ def detect_the_bottle_caps():
 
 
 def get_still_frame_from_video(video_filepath):
+    """Detects and returns a still frame of a given video file."""
     # load OpenCV VideoCapture on specified video
     vid = cv2.VideoCapture(video_filepath)
     print_verbose("opened video file")
@@ -121,28 +143,14 @@ def get_still_frame_from_video(video_filepath):
     
     # save the detected still frame if --save-stillframe is being used
     if(opt.save_stillframe):
-        filename = STILLFRAME_FOLDER + f'{video_filepath}_stillframe.jpg'  
+        filename = STILLFRAME_OUTPUT_FOLDER + f'{clean_filename(video_filepath)}_stillframe.jpg'  
         cv2.imwrite(filename, detected_still_frame)
         print_verbose("saved still frame")
 
     return detected_still_frame
 
-# source: https://stackoverflow.com/questions/61695773/how-to-set-the-best-value-for-gamma-correction
-def gamma_correct(image):
-    # bgr-image to HSV
-    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-    hue, sat, val = cv2.split(hsv)
-    # compute gamma as log(mid*255) / log(mean)
-    mid = 0.5
-    mean = np.mean(val)
-    gamma = math.log(mid*255)/math.log(mean)
-    # gamma correction on value channel
-    val_gamma = np.power(val, gamma).clip(0,255).astype(np.uint8)
-    # combine corrected value channel with original hue and saturation channels
-    hsv_gamma = cv2.merge([hue, sat, val_gamma])
-    return cv2.cvtColor(hsv_gamma, cv2.COLOR_HSV2BGR)
-
 def image_inference(image):
+    """Runs inference on an input-image to detect all bottle caps per class. Returns an annotated result image with bounding boxes around detected bottle caps."""
     # gamma correct input image
     image = gamma_correct(image)    
 
@@ -157,15 +165,15 @@ def image_inference(image):
     print_verbose("initialized detection model")
     print_verbose("starting bottle cap detection")
     
-    # run opencv's detect function on the passed-in image, using the specified confidence and non-max-supression threshs
-    classIds, confidences, boxes = net.detect(image, opt.conf_thres, opt.nms_thres)
+    # run opencv's detect function on the passed-in image, using the specified confidence and non-max-suppression threshs
+    classIds, confidences, boxes = net.detect(image, opt.conf, opt.nms)
     
     # get amount of distinct class objects
     classList = list(classIds)
     bottlecaps_facedown = classList.count(0)
     bottlecaps_faceup = classList.count(1)
     bottlecaps_deformed = classList.count(2)
-    print_verbose("detected %s bottle caps in total [%i %s, %i %s, %i %s]" % (len(boxes), bottlecaps_facedown, CLASS_NAMES[0], bottlecaps_faceup, CLASS_NAMES[1], bottlecaps_deformed, CLASS_NAMES[2]))
+    print_verbose("detected %s bottle caps in total [\u001b[34;1m%i %s\u001b[0m, \u001b[33;1m%i %s\u001b[0m, \u001b[32;1m%i %s\u001b[0m]" % (len(boxes), bottlecaps_facedown, CLASS_NAMES[0], bottlecaps_faceup, CLASS_NAMES[1], bottlecaps_deformed, CLASS_NAMES[2]))
     
     # draw bounding boxes around detected bottle caps
     print_verbose("annotation started")
@@ -183,9 +191,8 @@ def image_inference(image):
         if (opt.show_conf): cv2.putText(image, "%.2f" % confidences[box], (x,y+h-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
         print_verbose("annotation: bottle cap %s at position (%s,%s) with confidence %.2f" % (CLASS_NAMES[classIds[box][0]], x, y, confidences[box]))
     print_verbose("annotation ended")
-    # -- draw top-left verbose info-output --
-    
-    
+
+    # -- draw top-left verbose info-output --    
     # draw transparent rectangle for better text-readability (source, but adapted by me: https://stackoverflow.com/questions/56472024/how-to-change-the-opacity-of-boxes-cv2-rectangle)
     x, y, w, h = 0, 0, 426, 150
     sub_img = image[y:y+h, x:x+w]
@@ -194,15 +201,16 @@ def image_inference(image):
     image[y:y+h, x:x+w] = res
     
     # draw text info and separator line (between total amount and classes)
-    cv2.putText(image, str(bottlecaps_facedown) + " bottle caps face-down", (0,25), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[0], 2)
-    cv2.putText(image, str(bottlecaps_faceup) + " bottle caps face-up", (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[1], 2)
-    cv2.putText(image, str(bottlecaps_deformed) + " bottle caps deformed", (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[2], 2)
+    cv2.putText(image, str(bottlecaps_facedown) + " bottle caps %s" % CLASS_NAMES[0], (0,25), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[0], 2)
+    cv2.putText(image, str(bottlecaps_faceup) + " bottle caps %s" % CLASS_NAMES[1], (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[1], 2)
+    cv2.putText(image, str(bottlecaps_deformed) + " bottle caps %s" % CLASS_NAMES[2], (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[2], 2)
     cv2.putText(image, str(bottlecaps_facedown + bottlecaps_faceup + bottlecaps_deformed) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
     cv2.line(image, (0, 108), (424, 108), (175,175,175), 2)
 
     return image
 
 def video_inference(video):
+    """Reads an input video and runs inference frame-by-frame, immediately showing the results."""
     # read video file
     vid = cv2.VideoCapture(video)
     total_frames = int(cv2.VideoCapture.get(vid, FRAME_COUNT))
@@ -222,21 +230,26 @@ def video_inference(video):
             break
 
 if __name__ == "__main__":
+    # store start-time to calculate relative run-time in print-messages
     start_time = time.time()
 
+    # init argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', action='store_true',                                       help='print verbose info during runtime')
     parser.add_argument('--video' , type=str, default='',                                       help='input video file to extract a still frame and scan for bottle caps')
     parser.add_argument('--image' , type=str, default='',                                       help='input image file to directly scan for bottle caps')
-    parser.add_argument('--conf-thres', type=float, default=CONF_THRESHOLD,                     help='object confidence threshold')
-    parser.add_argument('--nms-thres', type=float, default=NON_MAX_SUPRESSION_THRESHOLD,        help='non max suppression threshold')
-    parser.add_argument('--show-result', action='store_true',                                   help='display results')
-    parser.add_argument('--show-conf', action='store_true',                                     help='display the confidence values in the annotated result')
+    parser.add_argument('--conf', type=float, default=CONF_THRESHOLD,                           help='object confidence threshold')
+    parser.add_argument('--nms', type=float, default=NON_MAX_SUPPRESSION_THRESHOLD,             help='non max suppression threshold')
+    parser.add_argument('--show-result', action='store_true',                                   help='display resulting frame after annotation')
+    parser.add_argument('--show-conf', action='store_true',                                     help='display the confidence values within the annotated result')
     parser.add_argument('--save-stillframe', action='store_true',                               help='save detected still-frames in the corresponding subfolder')
     parser.add_argument('--live', action='store_true',                                          help='live-annotation of the specified input video, frame-by-frame')
     opt = parser.parse_args()
-    
+    # set VERBOSE var to passed-in verbose-flag
     VERBOSE = opt.verbose
-    
+    # call detect_the_bottle_caps, if either --video or --image was specified
     if(opt.video or opt.image):
         detect_the_bottle_caps()
+    else: 
+        print("\033[93m-- Please specify some --video or --image file for detection. Take a look at all possible input arguments. --\033[0m\n")
+        parser.print_help()
