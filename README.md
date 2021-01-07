@@ -59,6 +59,7 @@ and you'll get an annotated still frame in ./uutput/annotated frames/ after appr
 ### region of interest detection ###
 --find-roi		find a region of interest to only detect bottle caps within the found roi
 --show-roi 		display detected region of interest
+
 ### misc ###
 --verbose		print extensive information per step during runtime
 --show-result		immediately show the annotated output frame using cv2.imshow
