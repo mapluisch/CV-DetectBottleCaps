@@ -38,7 +38,7 @@ or
 
 `python3 cheers.py --image some_img.jpg`
 
-and you'll get an annotated still frame in ./Output/Annotated Frames/ after approx. 0.2s for input images and approx. 0.5-1.0s for input videos. 
+and you'll get an annotated still frame in ./uutput/annotated frames/ after approx. 0.2s for input images and approx. 0.5-1.0s for input videos. 
 
 **Cheers** can also be used to live-annotate a passed-in video. You can also specify your own confidence- and non-max-suppresion-thresholds; please take a look at the parameters below.
 
