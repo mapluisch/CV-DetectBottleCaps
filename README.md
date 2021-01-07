@@ -42,7 +42,7 @@ and you'll get an annotated still frame in ./uutput/annotated frames/ after appr
 
 **Cheers** can also be used to live-annotate a passed-in video. You can also specify your own confidence- and non-max-suppresion-thresholds; please take a look at the parameters below.
 
- ## Arguments
+## Arguments
 
 ```
 ### input ###

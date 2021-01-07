@@ -38,6 +38,10 @@ NON_MAX_SUPPRESSION_THRESHOLD = 0.5
 CONF_THRESHOLD = 0.5
 ANNOTATION_LINE_THICKNESS = 4
 
+# -- Region of Interest min- and max-area relative to input image
+ROI_MIN_SIZE = 0.25
+ROI_MAX_SIZE = 0.8
+
 # -- Helper variables for detected object classes
 CLASS_COLORS = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 CLASS_NAMES = ["face-down", "face-up", "deformed"]
@@ -120,9 +124,18 @@ def detect_the_bottle_caps():
                 print_verbose("inference started")
                 classIds, confidences, boxes = image_inference(still_frame)
                 print_verbose("inference ended")
+
+                # look for a region of interest, if specified
+                # setup blank roi, either unused or overwritten if --find-roi is set
+                roi = (0,0,0,0)
+                if (opt.find_roi):
+                    print_verbose("region of interest search started")
+                    roi = get_region_of_interest(still_frame)
+                    print_verbose("region of interest search ended")
+                
                 # annotate still_frame using the detected classIds, confidences and box-positions
                 print_verbose("annotation started")
-                annotated_image = annotate_image(still_frame, classIds, confidences, boxes)
+                annotated_image = annotate_image(still_frame, classIds, confidences, boxes, roi)
                 print_verbose("annotation ended")
 
             # save the annotated result in the annotated output folder
@@ -188,6 +201,44 @@ def get_still_frame_from_video(video_filepath):
         print_verbose("saved still frame")
 
     return detected_still_frame
+
+def get_region_of_interest(image):
+    """Detects a region of interest within the passed-in image and returns the region of interests' (x,y,w,h). 
+    Source: https://answers.opencv.org/question/230859/opencv-does-not-detect-the-my-rectangle/"""
+    h, w, _ = image.shape
+    image_pixels = w*h
+    roi_min = image_pixels * ROI_MIN_SIZE
+    roi_max = image_pixels * ROI_MAX_SIZE
+    
+    # convert to grayscale
+    gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+
+    edged = cv2.Canny(image, 150, 450)
+
+    # Apply adaptive threshold
+    thresh = cv2.adaptiveThreshold(edged, 255, 1, 1, 11, 2)
+    thresh_color = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
+
+    # apply some dilation and erosion to join the gaps - change iteration to detect more or less area's
+    thresh = cv2.dilate(thresh,None,iterations = 50)
+    thresh = cv2.erode(thresh,None,iterations = 50)
+
+    # Find the contours
+    contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+    # find plausible contour for roi
+    # region of interests' x,y coordinate, followed by width and height
+    roi = (0,0,0,0)
+    for cnt in contours:
+        x,y,w,h = cv2.boundingRect(cnt)
+        # check if size fits within region-of-interest profile
+        if (w*h) >= roi_min and (w*h) <= roi_max:
+            roi = (x,y,w,h)
+            if (opt.show_roi): 
+                cv2.rectangle(image, (x,y), (x+w,y+h), (190,190,190), 4)
+                break
+    
+    return roi
 
 def high_precision_detection(video_filepath):
     """Detects a still frame of a given video file by checking every couple frames of footage and running inference on every generated frame + comparing results for higher-precision output."""
@@ -260,16 +311,25 @@ def image_inference(image, net=None, gammaCorrect=True):
     
     return classIds, confidences, boxes
 
-def annotate_image(image, classIds, confidences, boxes):
+def annotate_image(image, classIds, confidences, boxes, roi):
     """Annotates a given image using the detected classIds, confidences and box-positions."""
     classList = list(classIds)
     bottlecaps_facedown = classList.count(0)
     bottlecaps_faceup = classList.count(1)
     bottlecaps_deformed = classList.count(2)
 
+    roi_defined = (roi != (0,0,0,0))
+
     for box in range(0, len(boxes)):
         x, y = boxes[box][0:2]
         w, h = boxes[box][2:4]
+        # check if detected bounding box lies within detected roi, if roi was specified
+        # allow bottle caps that lie on the region-of-interest bounding box; if you don't want to count those, check for x+w > and y+h >
+        if (roi_defined):
+            if (x < roi[0] or y < roi[1] or x > roi[0]+roi[2] or y > roi[1]+roi[3]): 
+                print_verbose("annotation: ignored bottle cap outside of region of interest at position (%s,%s)" % (x,y))
+                continue
+
         color = CLASS_COLORS[classIds[box][0]]
         # draw bounding box
         cv2.rectangle (image, (x,y), (x+w, y+h), color, ANNOTATION_LINE_THICKNESS)
@@ -323,6 +383,7 @@ def video_inference(video):
         if cv2.waitKey(1) == 27:
             break
 
+
 if __name__ == "__main__":
     # store start-time to calculate relative run-time in print-messages
     start_time = time.time()
@@ -335,7 +396,9 @@ if __name__ == "__main__":
     parser.add_argument('--conf', type=float, default=CONF_THRESHOLD,                           help='object confidence threshold')
     parser.add_argument('--nms', type=float, default=NON_MAX_SUPPRESSION_THRESHOLD,             help='non max suppression threshold')
     parser.add_argument('--show-result', action='store_true',                                   help='display resulting frame after annotation')
+    parser.add_argument('--show-roi', action='store_true',                                      help='display detected region of interest')
     parser.add_argument('--show-conf', action='store_true',                                     help='display the confidence values within the annotated result')
+    parser.add_argument('--find-roi', action='store_true',                                      help='find a region of interest to only detect bottle caps within the found roi')
     parser.add_argument('--save-stillframe', action='store_true',                               help='save detected still-frames in the corresponding subfolder')
     parser.add_argument('--live', action='store_true',                                          help='live-annotation of the specified input video, frame-by-frame')
     parser.add_argument('--high-precision', action='store_true',                                help='enables comparatively slow, but more precise still-frame-detection and inference')
