@@ -11,14 +11,17 @@ I've trained my model using YOLOv4-tiny using ~500 images for training (~200 ori
 ## Sample
 Here's a quick sample of both a detected and extracted still-frame and the annotated result image.
  
-It took "Cheers!" 492ms in total to generate both result images; the input was a test-video file by me (~11 seconds, 1080p, 7MB).
+It takes Cheers ***~492ms*** in total to generate both result images; the input was a test-video file by me (~11 seconds, 1080p, 7MB).
  
-The still-frame detection and extraction takes ~175ms. 
+### Still-Frame detection
+The still-frame detection and extraction takes ***~175ms***. 
 ![Detected still-frame](docs/test_stillframe.jpg)
  
-Inference plus image annotation takes another ~160ms.
+### Inference + Annotation
+Inference plus image annotation takes ***~160ms***.
 ![Annotated result](docs/test_annotated.jpg)
 
+### Verbose console output
 Here's the verbose output you'll get, when running Cheers using the `--verbose` flag.
 ![Annotated result](docs/console_sample.jpg)
  
