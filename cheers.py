@@ -17,7 +17,7 @@ import numpy as np
 # ------------------- Variables -------------------
 
 # -- Whether the program is in competition mode (no fancy argument parser, only csv output) or not
-COMPETITION_MODE = True
+COMPETITION_MODE = False
 
 # -- Video Frame variables
 FRAME_POSITION = cv2.CAP_PROP_POS_FRAMES
@@ -147,7 +147,7 @@ def detect_the_bottle_caps():
                 print_verbose("csv-file generator started")
                 csv_name = "/" + clean_filename(opt.video) + ".csv"
                 with open(opt.output + csv_name, 'w') as csv_file:
-                    csv_writer(csv_file, classIds, boxes, roi)
+                    csv_writer(csv_file, classIds, boxes, roi, frame_index)
                 print_verbose("csv-file generator ended")
 
             # save the annotated result in the annotated output folder
@@ -163,7 +163,6 @@ def detect_the_bottle_caps():
                 cv2.waitKey()
     else:
         print("Please specify a correct file path to your video/image file.")
-
 
 def detect_the_bottle_caps_competition():
     video_path = sys.argv[1]
@@ -251,15 +250,15 @@ def get_region_of_interest(image):
     # convert to grayscale
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 
-    edged = cv2.Canny(image, 50, 300)
+    edged = cv2.Canny(image, 150, 350)
 
     # Apply adaptive threshold
     thresh = cv2.adaptiveThreshold(edged, 255, 1, 1, 11, 2)
     thresh_color = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
     # apply some dilation and erosion to join the gaps - change iteration to detect more or less area's
-    thresh = cv2.dilate(thresh,None,iterations = 30)
-    thresh = cv2.erode(thresh,None,iterations = 30)
+    thresh = cv2.dilate(thresh,None,iterations = 20)
+    thresh = cv2.erode(thresh,None,iterations = 20)
 
     # Find the contours
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -359,9 +358,8 @@ def image_inference(image, net=None, gammaCorrect=True):
 def annotate_image(image, classIds, confidences, boxes, roi):
     """Annotates a given image using the detected classIds, confidences and box-positions."""
     classList = list(classIds)
-    bottlecaps_facedown = classList.count(0)
-    bottlecaps_faceup = classList.count(1)
-    bottlecaps_deformed = classList.count(2)
+    # save each class-total in cap_counts, with class 0 = facedown, 1 = faceup, 2 = deformed
+    cap_counts = [classList.count(0), classList.count(1), classList.count(2)]
 
     roi_defined = (roi != (0,0,0,0))
 
@@ -373,6 +371,8 @@ def annotate_image(image, classIds, confidences, boxes, roi):
         if (roi_defined):
             if (x < roi[0] or y < roi[1] or x > roi[0]+roi[2] or y > roi[1]+roi[3]): 
                 print_verbose("annotation: ignored bottle cap outside of region of interest at position (%s,%s)" % (x,y))
+                # remove out-of-bounds cap from class-cap-count
+                cap_counts[classIds[box][0]] -= 1
                 continue
 
         color = CLASS_COLORS[classIds[box][0]]
@@ -383,7 +383,7 @@ def annotate_image(image, classIds, confidences, boxes, roi):
         cv2.rectangle (image, (x,y), (x+w, y+header_height), color, -1)
         cv2.putText(image, CLASS_NAMES[classIds[box][0]], (x,y+header_height-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,255))
         # draw confidence, if --show-conf is being used
-        if (opt.show_conf): cv2.putText(image, "%.2f" % confidences[box], (x,y+h-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,0), 2)
+        if (opt.show_conf): cv2.putText(image, "%.2f" % confidences[box], (x,y+h-5), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 2)
         print_verbose("annotation: bottle cap %s at position (%s,%s) with confidence %.2f" % (CLASS_NAMES_COLORED[classIds[box][0]], x, y, confidences[box]))
 
     # -- draw top-left verbose info-output --    
@@ -395,10 +395,10 @@ def annotate_image(image, classIds, confidences, boxes, roi):
     image[y:y+h, x:x+w] = res
     
     # draw text info and separator line (between total amount and classes)
-    cv2.putText(image, str(bottlecaps_facedown) + " bottle caps %s" % CLASS_NAMES[0], (0,25), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[0], 2)
-    cv2.putText(image, str(bottlecaps_faceup) + " bottle caps %s" % CLASS_NAMES[1], (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[1], 2)
-    cv2.putText(image, str(bottlecaps_deformed) + " bottle caps %s" % CLASS_NAMES[2], (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[2], 2)
-    cv2.putText(image, str(bottlecaps_facedown + bottlecaps_faceup + bottlecaps_deformed) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+    cv2.putText(image, str(cap_counts[0]) + " bottle caps %s" % CLASS_NAMES[0], (0,25), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[0], 2)
+    cv2.putText(image, str(cap_counts[1]) + " bottle caps %s" % CLASS_NAMES[1], (0,60), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[1], 2)
+    cv2.putText(image, str(cap_counts[2]) + " bottle caps %s" % CLASS_NAMES[2], (0,95), cv2.FONT_HERSHEY_DUPLEX, 1, CLASS_COLORS[2], 2)
+    cv2.putText(image, str(sum(cap_counts)) + " bottle caps in total", (0,140), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
     cv2.line(image, (0, 108), (424, 108), (175, 175, 175), 2)
     
     return image
