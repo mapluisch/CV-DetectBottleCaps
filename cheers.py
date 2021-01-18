@@ -122,7 +122,7 @@ def detect_the_bottle_caps():
 
             if(video_input and opt.high_precision): annotated_image = high_precision_detection(opt.video)
             else:    
-                if(video_input): still_frame = get_still_frame_from_video(opt.video)
+                if(video_input): frame_index, still_frame = get_still_frame_from_video(opt.video)
                 else: still_frame = cv2.imread(opt.image)
 
                 # start inference on the detected/supplied still frame
@@ -169,7 +169,7 @@ def detect_the_bottle_caps_competition():
     video_path = sys.argv[1]
     output = sys.argv[2]
     # detect the still frame
-    still_frame = get_still_frame_from_video(video_path)
+    frame_index, still_frame = get_still_frame_from_video(video_path)
     # start inference on the detected/supplied still frame
     print_verbose("inference started")
     classIds, confidences, boxes = image_inference(still_frame)
@@ -186,7 +186,7 @@ def detect_the_bottle_caps_competition():
     print_verbose("csv-file generator started")
     csv_name = "/" + clean_filename(video_path) + ".csv"
     with open(output + csv_name, 'w') as csv_file:
-        csv_writer(csv_file, classIds, boxes, roi)
+        csv_writer(csv_file, classIds, boxes, roi, frame_index)
     print_verbose("csv-file generator ended")
 
 def get_still_frame_from_video(video_filepath):
@@ -212,6 +212,7 @@ def get_still_frame_from_video(video_filepath):
     # pre-set detected-still frame to the initially read frame and its absolute difference to the previous one (infinity, since there is no previous frame)
     detected_still_frame = last_frame
     min_absdiff = float('inf')
+    frame_index = 0
 
     # check one frame per every two seconds of video
     print_verbose("looking for a still frame")
@@ -225,6 +226,7 @@ def get_still_frame_from_video(video_filepath):
         # overwrite detected_still_frame if new lowest difference has been found
         if(diff.sum() < min_absdiff):
             detected_still_frame = frame
+            frame_index = i
             min_absdiff = diff.sum()
         # set frame (x-1) to (x) for the next iteration
         last_frame = frame
@@ -236,7 +238,7 @@ def get_still_frame_from_video(video_filepath):
         cv2.imwrite(filename, detected_still_frame)
         print_verbose("saved still frame")
 
-    return detected_still_frame
+    return frame_index, detected_still_frame
 
 def get_region_of_interest(image):
     """Detects a region of interest within the passed-in image and returns the region of interests' (x,y,w,h). 
@@ -426,7 +428,7 @@ def video_inference(video):
         if cv2.waitKey(1) == 27:
             break
 
-def csv_writer(csv_file, classIds, boxes, roi):
+def csv_writer(csv_file, classIds, boxes, roi, frame_index):
     # setup csv writer object
     writer = csv.writer(csv_file, quoting=csv.QUOTE_NONNUMERIC)
     # check if a valid roi has been found and passed into this function
@@ -442,7 +444,7 @@ def csv_writer(csv_file, classIds, boxes, roi):
                 print_verbose("annotation: ignored bottle cap outside of region of interest at position (%s,%s)" % (x,y))
                 continue
             
-        row_content = [box, x, y, CSV_CLASS_NAMES[classIds[box][0]]]
+        row_content = [frame_index, x, y, CSV_CLASS_NAMES[classIds[box][0]]]
         writer.writerow(row_content)
         
 if __name__ == "__main__":
