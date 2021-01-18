@@ -5,15 +5,19 @@ Given a video-file, it'll either detect a still frame and run inference and anno
 Given an image-file, it'll directly run inference and annotation on it.
 """
 
-import sys
 import os
+import csv
 import cv2
-import time
+import sys
 import math
+import time
 import argparse
 import numpy as np
 
 # ------------------- Variables -------------------
+
+# -- Whether the program is in competition mode (no fancy argument parser, only csv output) or not
+COMPETITION_MODE = True
 
 # -- Video Frame variables
 FRAME_POSITION = cv2.CAP_PROP_POS_FRAMES
@@ -22,9 +26,9 @@ START_FRAME_FACTOR = 1/3
 END_FRAME_FACTOR = 2/3
 LIVE_FRAMESKIP = 0
 
-# -- Output directories
-STILLFRAME_OUTPUT_DIR = './output/still frames/'
-ANNOTATED_OUTPUT_DIR = './output/annotated frames/'
+# -- Relaitve output directories
+STILLFRAME_OUTPUT_DIR = '/still frames/'
+ANNOTATED_OUTPUT_DIR = '/annotated frames/'
 
 # -- Trained YOLO config directory and filename
 CONFIG_DIR = './dnn/configs/'
@@ -45,6 +49,7 @@ ROI_MAX_SIZE = 0.8
 # -- Helper variables for detected object classes
 CLASS_COLORS = [(255, 101, 59), (19, 201, 225), (53, 159, 7)]
 CLASS_NAMES = ["face-down", "face-up", "deformed"]
+CSV_CLASS_NAMES = ["BottleCap_FaceDown", "BottleCap_FaceUp", "BottleCap_Deformed"]
 CLASS_NAMES_COLORED = ["\u001b[34;1mface-down\u001b[0m", "\u001b[33;1mface-up\u001b[0m", "\u001b[32;1mdeformed\u001b[0m"]
 
 # -------------------------------------------------
@@ -101,7 +106,7 @@ def init_net_model():
 # ------------------- Cheers! ---------------------
 
 def detect_the_bottle_caps():
-    """Reads the input and delegates it to the correct sub-functions for still-frame detection and inference. Saves (and shows) the annotated result."""
+    """Reads the input and delegates it to the correct sub-functions for still-frame detection and inference. Saves (and shows) the annotated result."""   
     # check for filepath validity first
     if os.path.exists(opt.video) or os.path.exists(opt.image):
         # ----- Live Video Inference -----
@@ -138,10 +143,17 @@ def detect_the_bottle_caps():
                 annotated_image = annotate_image(still_frame, classIds, confidences, boxes, roi)
                 print_verbose("annotation ended")
 
+                # create output csv file
+                print_verbose("csv-file generator started")
+                csv_name = "/" + clean_filename(opt.video) + ".csv"
+                with open(opt.output + csv_name, 'w') as csv_file:
+                    csv_writer(csv_file, classIds, boxes, roi)
+                print_verbose("csv-file generator ended")
+
             # save the annotated result in the annotated output folder
             filename = opt.video if (video_input) else opt.image
             filename = clean_filename(filename)
-            output_filepath = ANNOTATED_OUTPUT_DIR + filename + "_annotated.jpg"
+            output_filepath = opt.output + ANNOTATED_OUTPUT_DIR + filename + "_annotated.jpg"
             cv2.imwrite(output_filepath, annotated_image)
             print_verbose("successfully saved an annotated frame [%s]" % output_filepath, forcePrint=True)
 
@@ -152,6 +164,30 @@ def detect_the_bottle_caps():
     else:
         print("Please specify a correct file path to your video/image file.")
 
+
+def detect_the_bottle_caps_competition():
+    video_path = sys.argv[1]
+    output = sys.argv[2]
+    # detect the still frame
+    still_frame = get_still_frame_from_video(video_path)
+    # start inference on the detected/supplied still frame
+    print_verbose("inference started")
+    classIds, confidences, boxes = image_inference(still_frame)
+    print_verbose("inference ended")
+
+    # look for a region of interest, if specified
+    # setup blank roi, either unused or overwritten if --find-roi is set
+    roi = (0,0,0,0)
+    print_verbose("region of interest search started")
+    roi = get_region_of_interest(still_frame)
+    print_verbose("region of interest search ended")
+    
+    # create output csv file
+    print_verbose("csv-file generator started")
+    csv_name = "/" + clean_filename(video_path) + ".csv"
+    with open(output + csv_name, 'w') as csv_file:
+        csv_writer(csv_file, classIds, boxes, roi)
+    print_verbose("csv-file generator ended")
 
 def get_still_frame_from_video(video_filepath):
     """Detects and returns a still frame of a given video file."""
@@ -196,7 +232,7 @@ def get_still_frame_from_video(video_filepath):
     
     # save the detected still frame if --save-stillframe is being used
     if(opt.save_stillframe):
-        filename = STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg'  
+        filename = opt.output + STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg'  
         cv2.imwrite(filename, detected_still_frame)
         print_verbose("saved still frame")
 
@@ -213,15 +249,15 @@ def get_region_of_interest(image):
     # convert to grayscale
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 
-    edged = cv2.Canny(image, 150, 450)
+    edged = cv2.Canny(image, 50, 300)
 
     # Apply adaptive threshold
     thresh = cv2.adaptiveThreshold(edged, 255, 1, 1, 11, 2)
     thresh_color = cv2.cvtColor(thresh, cv2.COLOR_GRAY2BGR)
 
     # apply some dilation and erosion to join the gaps - change iteration to detect more or less area's
-    thresh = cv2.dilate(thresh,None,iterations = 50)
-    thresh = cv2.erode(thresh,None,iterations = 50)
+    thresh = cv2.dilate(thresh,None,iterations = 30)
+    thresh = cv2.erode(thresh,None,iterations = 30)
 
     # Find the contours
     contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -235,9 +271,9 @@ def get_region_of_interest(image):
         if (w*h) >= roi_min and (w*h) <= roi_max:
             roi = (x,y,w,h)
             if (opt.show_roi): 
-                cv2.rectangle(image, (x,y), (x+w,y+h), (190,190,190), 4)
+                cv2.rectangle(image, (x,y), (x+w,y+h), (30,30,30), 4)
                 break
-    
+    print_verbose("detected region of interest at position (%s, %s) with a size of (%s, %s)" % (roi[0], roi[1], roi[2], roi[3]))
     return roi
 
 def high_precision_detection(video_filepath):
@@ -281,10 +317,17 @@ def high_precision_detection(video_filepath):
             best_confidences = confidences
             best_boxes = boxes
             object_count = len(boxes)
-    print_verbose("found best-case frame")    
+    print_verbose("found best-case frame")
+    
+    if(opt.save_stillframe):
+        filename = opt.output + STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg'  
+        cv2.imwrite(filename, best_frame)
+        print_verbose("saved still frame")  
 
     print_verbose("annotation started")
-    annotate_image(best_frame, best_classIds, best_confidences, best_boxes)
+    # set empty roi
+    roi = (0,0,0,0)
+    annotate_image(best_frame, best_classIds, best_confidences, best_boxes, roi)
     print_verbose("annotation ended")
 
     return best_frame
@@ -383,16 +426,36 @@ def video_inference(video):
         if cv2.waitKey(1) == 27:
             break
 
+def csv_writer(csv_file, classIds, boxes, roi):
+    # setup csv writer object
+    writer = csv.writer(csv_file, quoting=csv.QUOTE_NONNUMERIC)
+    # check if a valid roi has been found and passed into this function
+    roi_defined = (roi != (0,0,0,0))
 
+    for box in range(0, len(boxes)):
+        x, y = boxes[box][0:2]
+        w, h = boxes[box][2:4]
+        # check if detected bounding box lies within detected roi, if roi was specified
+        # allow bottle caps that lie on the region-of-interest bounding box; if you don't want to count those, check for x+w > and y+h >
+        if (roi_defined):
+            if (x < roi[0] or y < roi[1] or x > roi[0]+roi[2] or y > roi[1]+roi[3]): 
+                print_verbose("annotation: ignored bottle cap outside of region of interest at position (%s,%s)" % (x,y))
+                continue
+            
+        row_content = [box, x, y, CSV_CLASS_NAMES[classIds[box][0]]]
+        writer.writerow(row_content)
+        
 if __name__ == "__main__":
     # store start-time to calculate relative run-time in print-messages
     start_time = time.time()
+
 
     # init argument parser
     parser = argparse.ArgumentParser()
     parser.add_argument('--verbose', action='store_true',                                       help='print verbose info during runtime')
     parser.add_argument('--video' , type=str, default='',                                       help='input video file to extract a still frame and scan for bottle caps')
     parser.add_argument('--image' , type=str, default='',                                       help='input image file to directly scan for bottle caps')
+    parser.add_argument('--output' , type=str, default='./output',                              help='output folder for still frames, annotated results and the csv-file')
     parser.add_argument('--conf', type=float, default=CONF_THRESHOLD,                           help='object confidence threshold')
     parser.add_argument('--nms', type=float, default=NON_MAX_SUPPRESSION_THRESHOLD,             help='non max suppression threshold')
     parser.add_argument('--show-result', action='store_true',                                   help='display resulting frame after annotation')
@@ -402,11 +465,23 @@ if __name__ == "__main__":
     parser.add_argument('--save-stillframe', action='store_true',                               help='save detected still-frames in the corresponding subfolder')
     parser.add_argument('--live', action='store_true',                                          help='live-annotation of the specified input video, frame-by-frame')
     parser.add_argument('--high-precision', action='store_true',                                help='enables comparatively slow, but more precise still-frame-detection and inference')
+    
+    if COMPETITION_MODE:
+        parser.add_argument('video', metavar='V', type=str, help="path to video-file, used for detecting all bottle caps")
+        parser.add_argument('output', metavar='O', type=str, help='output folder')
+
     opt = parser.parse_args()
 
-    # call detect_the_bottle_caps, if either --video or --image was specified
-    if(opt.video or opt.image):
-        detect_the_bottle_caps()
+    # check for "competition mode", where only sys.argv is parsed and the argument parser is skipped
+    if (len(sys.argv) > 1):
+        # if the first argument is a valid file path, assume that the argument parser should be skipped
+        # otherwise, the first argument would be --video e.g.
+        if os.path.exists(sys.argv[1]):
+            print("competition mode")
+            detect_the_bottle_caps_competition()
+        elif(opt.video or opt.image):
+            detect_the_bottle_caps()
+
     else: 
         print("\033[93m-- Please specify some --video or --image file for detection. Take a look at all possible input arguments. --\033[0m\n")
         parser.print_help()
