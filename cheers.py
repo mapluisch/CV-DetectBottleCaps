@@ -2,7 +2,7 @@
 """ 
 "Cheers" detects and annotates bottle caps in a given video or image file and returns an annotated output frame.
 Given a video-file, it'll either detect a still frame and run inference and annotation on it or do it live, frame-by-frame (--live argument).
-Given an image-file, it'll directly run inference and annotation on it.
+Given an image-file, it'll directly run inference and return an annotated result image.
 """
 
 import os
@@ -154,6 +154,8 @@ def detect_the_bottle_caps():
             filename = opt.video if (video_input) else opt.image
             filename = clean_filename(filename)
             output_filepath = opt.output + ANNOTATED_OUTPUT_DIR + filename + "_annotated.jpg"
+            # create "annotated frames" directory inside the output directory, if it doesn't exist
+            if not os.path.exists(opt.output + ANNOTATED_OUTPUT_DIR): os.mkdir(opt.output + ANNOTATED_OUTPUT_DIR)
             cv2.imwrite(output_filepath, annotated_image)
             print_verbose("successfully saved an annotated frame [%s]" % output_filepath, forcePrint=True)
 
@@ -233,7 +235,8 @@ def get_still_frame_from_video(video_filepath):
     
     # save the detected still frame if --save-stillframe is being used
     if(opt.save_stillframe):
-        filename = opt.output + STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg'  
+        filename = opt.output + STILLFRAME_OUTPUT_DIR + f'{clean_filename(video_filepath)}_stillframe.jpg' 
+        if not os.path.exists(opt.output + STILLFRAME_OUTPUT_DIR): os.mkdir(opt.output + STILLFRAME_OUTPUT_DIR)
         cv2.imwrite(filename, detected_still_frame)
         print_verbose("saved still frame")
 
@@ -250,7 +253,7 @@ def get_region_of_interest(image):
     # convert to grayscale
     gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
 
-    edged = cv2.Canny(image, 150, 350)
+    edged = cv2.Canny(image, 150, 400)
 
     # Apply adaptive threshold
     thresh = cv2.adaptiveThreshold(edged, 255, 1, 1, 11, 2)
@@ -422,7 +425,8 @@ def video_inference(video):
         print_verbose("read frame %i" % i)
         # if frame is correctly read, run inference and immediately show the result; skip gamma correction for faster output
         if (ret):
-            annotated_frame = image_inference(frame, net, False)
+            classIds, confidences, boxes = image_inference(frame, net, False)
+            annotated_frame = annotate_image(frame, classIds, confidences, boxes, (0,0,0,0))
             cv2.imshow('Cheers - Video Inference', annotated_frame)
         # press ESC to quit prematurely
         if cv2.waitKey(1) == 27:
